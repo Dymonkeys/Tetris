@@ -26,7 +26,7 @@ public class TetrisMain {
     private GameDisplay display;
     //private Node head; //Head of tree and traversal Node
     public static void main(String[] args) {
-        new TetrisMain(10, 5,1);
+        new TetrisMain(5, 4,1);
         //new TetrisMain(1, 6,5);
         //new TetrisMain(30, 5,2);
     }
@@ -36,14 +36,18 @@ public class TetrisMain {
         this.stepSize=stepSize;
         this.nextNodes = new Node[stepSize];
         //if(stepSize!=1) showNext = false;
-        startState = new GameState();
+        //Paramaters paramaters = new Paramaters
+        //(0, 20, 50, 200,
+        // 30, 6, 1, 50);
+        Paramaters paramaters = new Paramaters();
+        startState = new GameState(paramaters);
         GameDisplay display = new GameDisplay(startState);
         makeFrame(display);
         run(display);
     }
     //Creates a JFrame for a GameDisplay object,
     //and automatically sizes it to fit the screen.
-    public JFrame makeFrame(GameDisplay display){
+    public static JFrame makeFrame(GameDisplay display){
         JFrame GUI = new JFrame();
         int height = (int)Toolkit.getDefaultToolkit().getScreenSize().getHeight();
         height-=80;

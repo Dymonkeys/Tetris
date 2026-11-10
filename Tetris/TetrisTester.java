@@ -40,7 +40,11 @@ public class TetrisTester {
         states.toArray(s);
         return displayStates(s);
     }
+
     public static GameGrid displayStates(GameState[] states){
+        return displayStates(states,"Tetris");
+    }
+    public static GameGrid displayStates(GameState[] states, String title){
         int count = states.length;
         JFrame GUI = new JFrame();
         //GUI.setSize(Math.min(400*count,1600),800);
@@ -62,7 +66,7 @@ public class TetrisTester {
         GUI.setSize(width,height);
         GUI.setLayout(new GridLayout(rows,columns));
         GUI.setBackground(Color.BLACK);
-        GUI.setTitle("Tetris");
+        GUI.setTitle(title);
         GUI.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         Container pane = GUI.getContentPane();
         if(states.length==1){

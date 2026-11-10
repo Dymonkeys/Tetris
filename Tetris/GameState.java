@@ -1,5 +1,6 @@
 package Tetris;
 import java.util.ArrayList;
+import java.util.Random;
 /*
  * File: gamestate.java
  * Author: David Neufeld
@@ -19,17 +20,27 @@ public class GameState {
     public int points = 0;
     final int spawnX = 4;
     final int spawnY =1;
-    int score=0;
     final boolean debug = false;
+    public Paramaters paramaters;
     CopyableRandom r;
     
-    public GameState(){
+    public GameState(Paramaters paramaters){
+        this.paramaters=paramaters;
         this.grid=new int[10][20];
         r = new CopyableRandom();
         queue = new ArrayList<>();
         queue.add(new TetrisShape(r.nextInt(7)+1));
     }
-    public GameState(int[][] grid,ArrayList<TetrisShape> queue,TetrisShape hold, int shapeX, int shapeY,int points, ArrayList<Integer> shapeBag,CopyableRandom random){
+
+    public GameState(){
+        this.paramaters=new Paramaters();
+        this.grid=new int[10][20];
+        r = new CopyableRandom();
+        queue = new ArrayList<>();
+        queue.add(new TetrisShape(r.nextInt(7)+1));
+    }
+    public GameState(int[][] grid,ArrayList<TetrisShape> queue,TetrisShape hold, int shapeX, int shapeY,int points, ArrayList<Integer> shapeBag,CopyableRandom random, Paramaters paramaters){
+        this.paramaters=paramaters;
         this.queue = new ArrayList<>();
         this.points=points;
         r=random.copy();
@@ -168,7 +179,7 @@ public class GameState {
     }
     //Returns a clone of this gamestate, copying the queue, points, rng etc.
     public GameState clone(){
-        GameState c = new GameState(grid,queue,hold,shapeX,shapeY,points,shapeBag,r);
+        GameState c = new GameState(grid,queue,hold,shapeX,shapeY,points,shapeBag,r,paramaters);
         return c;
     }
     //Returns n elements of the queue, Generating them as needed.
@@ -219,10 +230,14 @@ public class GameState {
         //Points are awarded or subtracted based on number of rows cleared. 
         //Sense I want my AI to get frequent tetrises, it is punished for only 
         //clearing one or two rows at a time
-        if(rowsCleared==1) points+=-30;
-        else if(rowsCleared==2) points+=-20;
-        else if(rowsCleared==3) points+=0;
-        else if(rowsCleared==4) points+=100;
+        if(rowsCleared==1) points+=paramaters.singleScore;
+        else if(rowsCleared==2) points+=paramaters.doubleScore;
+        else if(rowsCleared==3) points+=paramaters.tripleScore;
+        else if(rowsCleared==4) points+=paramaters.tetrisScore;
+
+        //TODO DELETE ME
+        //Temporary! Make the model more likely to clear a row whenever it can
+        //if(rowsCleared>=1) points+=20;
     }
     //Evaluate returns the heuristic for a game state, which considers apects like:
     //Height of the blocks, empty space under blocks, gaps inbetween blocks horizontally,
@@ -238,7 +253,7 @@ public class GameState {
                 }
                 else if(last&&grid[x][y]<=0){
                     //last=false;
-                    value-=25;
+                    value-=paramaters.verticalGapPenalty;
                 }
             }
         }
@@ -252,12 +267,13 @@ public class GameState {
                 }
                 else if(last&&grid[x][y]<=0){
                     last=false;
-                    value-=10;
+                    value-=paramaters.horizontalGapPenalty;
                 }
             }
         }
+        //Detracts value for the tower getting too tall exponsionally
         for(int y=0;y<20;y++){
-            if(isRowEmpty(y)) value+=Math.max((12-y),0)*15;
+            if(isRowEmpty(y)) value+=Math.max((20-paramaters.heightPenaltyThreshold-y),0)*paramaters.heightPenalty;
         }
         return value;
     }
@@ -352,7 +368,8 @@ public class GameState {
     public Instruction[] createPath(int x, int y){
         ArrayList<Instruction> path = new ArrayList<>();
         TetrisShape shape = queue.get(0);
-        int initialRotation = shape.rotation;
+        //shape.rotation=0;
+        int initialRotation = 0;
         shapeX=x;
         shapeY=y;
         Instruction lastmove=Instruction.down;
@@ -361,8 +378,8 @@ public class GameState {
             if(moveShape(0,-1)){path.add(Instruction.down);}
             else if((lastmove!=Instruction.right)&&moveShape(1, 0)){path.add(Instruction.left);}
             else if((lastmove!=Instruction.left)&&moveShape(-1, 0)){path.add(Instruction.right);}
-            else if((lastmove!=Instruction.anyrotate)&&rotateShape(-1)){path.add(Instruction.rotateleft);}
-            else if((lastmove!=Instruction.anyrotate)&&rotateShape(1)){path.add(Instruction.rotateright);}
+            else if((lastmove!=Instruction.anyrotate)&&rotateShape(-1)){path.add(Instruction.rotateright);}
+            else if((lastmove!=Instruction.anyrotate)&&rotateShape(1)){path.add(Instruction.rotateleft);}
             else if((lastmove!=Instruction.anyrotate)&&rotateShape(2)){path.add(Instruction.rotate180);}
             else{
                 //placeShape(shape, shapeX, shapeY,9);
@@ -375,6 +392,8 @@ public class GameState {
             lastmove = path.get(path.size()-1);
             if(lastmove==Instruction.rotate180||lastmove==Instruction.rotateleft||lastmove==Instruction.rotateright)
             lastmove=Instruction.anyrotate;
+            if(shapeX > spawnX && (r.nextDouble()<.15) && moveShape(-1, 0)) path.add(Instruction.right);
+            else if(shapeX < spawnX && (r.nextDouble()<.15) && moveShape(1, 0)) path.add(Instruction.left);
         }
         while(shapeX>spawnX){
             shapeX--;
@@ -384,23 +403,84 @@ public class GameState {
             shapeX++;
             path.add(Instruction.left);
         }
-        if(shape.rotation==1) path.add(Instruction.rotateleft);
-        else if(shape.rotation==3) path.add(Instruction.rotateright);
+        if(shape.rotation==1) path.add(Instruction.rotateright);
+        else if(shape.rotation==3) path.add(Instruction.rotateleft);
         else if(shape.rotation==2) path.add(Instruction.rotate180);
         shapeX=spawnX;
         shapeY=spawnY;
         shape.rotation=initialRotation;
+        if(path.size()>30)return null;
+        //Remove all down sequential down moves at the start
+        while((path.get(0)==Instruction.down) && path.size()>1) {
+            path.remove(0);
+        }
+        //Always end path with drop
+        path.add(0, Instruction.drop);
         Instruction[] p = new Instruction[path.size()];
         for(int i=0;i<path.size();i++){
             p[i]=path.get(path.size()-i-1);
         }
         return p;
     }
+
+    public GameState followInstruction(Instruction i){
+        if(i == Instruction.down){
+            shapeFall();
+        }
+        else if(i == Instruction.left){
+            if(!moveShape(-1,0)) shapeFall();
+        }
+        else if(i == Instruction.right){
+            if(!moveShape(1,0)) shapeFall();
+        }
+        else if(i == Instruction.drop){
+            dropShape();
+        }
+        else if(i == Instruction.rotateleft){
+            if(!rotateShape(-1)) shapeFall();
+        }
+        else if(i == Instruction.rotateright){
+            if(!rotateShape(1)) shapeFall();
+        }
+        else if(i == Instruction.rotate180){
+            if(!rotateShape(2)) shapeFall();
+        }
+        updateGame();
+        return this;
+    }
+
+    public GameState[] followPath(Instruction[] path){
+        queue.get(0).rotation=0;
+        ArrayList<GameState> out = new ArrayList<GameState>();
+        for(Instruction i:path){
+            out.add(clone());
+            if(i == Instruction.down){
+                moveShape(0, 1);
+            }
+            else if(i == Instruction.left){
+                moveShape(-1,0);
+            }
+            else if(i == Instruction.right){
+                moveShape(1,0);
+            }
+            else if(i == Instruction.rotateleft){
+                rotateShape(-1);
+            }
+            else if(i == Instruction.rotateright){
+                rotateShape(1);
+            }
+            else if(i == Instruction.rotate180){
+                rotateShape(2);
+            }
+        }
+        return out.toArray(new GameState[0]);
+    }
     
     public enum Instruction {
         down,
         left,
         right,
+        drop,
         rotateleft,
         rotateright,
         rotate180,
